@@ -1,5 +1,7 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHSDaemonControl
 
+          - Builds deb file
+
 0.1.1     2015-06-07 01:25:30
           - Added project files to master branch
 
