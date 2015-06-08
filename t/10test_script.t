@@ -2,7 +2,7 @@ use t::boilerplate;
 
 use Test::More;
 
-use_ok 'Dist::Zilla::Plugin::Dpkg::FHSDaemonControl';
+use_ok 'Dist::Zilla::Plugin::Dpkg::FHS';
 
 done_testing;
 

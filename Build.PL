@@ -17,12 +17,12 @@ my $prereqs  = {
   },
   'requires' => {
     'Dist::Zilla::Plugin::Dpkg' => '0.05',
-    'Module::Load' => '0.32',
     'Module::Metadata' => '1.000024',
     'Moose' => '2.1213',
     'Pod::Simple' => '3.28',
     'Software::License' => '0.103010',
     'Text::Format' => '0.59',
+    'namespace::autoclean' => '0.22',
     'perl' => '5.010001'
   },
 };

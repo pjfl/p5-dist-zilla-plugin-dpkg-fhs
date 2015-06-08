@@ -12,6 +12,7 @@ use Moose::Util::TypeConstraints;
 
 extends 'Dist::Zilla::Plugin::Dpkg';
 
+# Type constraints
 enum    'WebServer',     [ qw( all apache native nginx none ) ];
 
 subtype 'ApacheModule',  as 'Str', where { $_ =~ m{ \A [a-z_]+ \z }mx };
@@ -27,6 +28,7 @@ subtype 'ListOfStr',     as 'ArrayRef[Str]',
 
 coerce  'ListOfStr',     from 'Str', via { [ split m{ \s+ }mx ] };
 
+# Attribute default overrides
 has '+default_template_default' =>
    default => '# Defaults for {$package_name} initscript
 # sourced by /etc/init.d/{$package_name}
@@ -34,6 +36,10 @@ has '+default_template_default' =>
 
 # This is a POSIX shell fragment
 ';
+
+has '+install_template_default' => default => '';
+
+has '+package_section' => default => 'perl';
 
 has '+postinst_template_default' =>
    default => '#!/bin/sh
@@ -75,8 +81,6 @@ esac
 
 exit 0
 ';
-
-has '+install_template_default'  => default => '';
 
 has '+postrm_template_default' =>
    default => '#!/bin/sh
@@ -139,6 +143,7 @@ override_dh_pysupport:
 
 ';
 
+# Public attributes
 has 'apache_modules'   => is => 'ro', isa => 'ApacheModules', coerce => 1;
 
 has 'bindir'           => is => 'ro', isa => 'Str', default =>
@@ -171,6 +176,7 @@ has 'web_server'       => is => 'ro', isa => 'WebServer', default => 'native';
 
 has 'uninstall_cmd'    => is => 'ro', isa => 'Str', required => 1;
 
+# Attribute constructors
 sub _build_license_keys {
    return {
       perl       => 'Perl_5',
@@ -199,6 +205,7 @@ sub _build_module_metadata {
       ( $_[ 0 ]->zilla->main_module->name, collect_pod => 1 );
 }
 
+# Private subroutines
 my $get_homepage = sub {
    return sprintf '%s/%s/', $_[ 0 ]->permalink, $_[ 0 ]->package_name;
 };
@@ -336,16 +343,7 @@ my $maybe_set_execute_permission = sub {
    return;
 };
 
-around '_generate_file' => sub {
-   my ($orig, $self, $file, $required, $vars) = @_;
-
-   my $res = $orig->( $self, $file, $required, $self->$enhance( $vars ) );
-
-   $self->$maybe_set_execute_permission( $self->zilla->files );
-
-   return $res;
-};
-
+# Public methods
 sub add_debian_copyright {
    my $self = shift; my (@res, %licenses);
 
@@ -407,6 +405,17 @@ sub fix_changelog {
    return;
 }
 
+# Construction
+around '_generate_file' => sub { # So it's a private method, meh
+   my ($orig, $self, $file, $required, $vars) = @_;
+
+   my $res = $orig->( $self, $file, $required, $self->$enhance( $vars ) );
+
+   $self->$maybe_set_execute_permission( $self->zilla->files );
+
+   return $res;
+};
+
 after 'setup_installer' => sub {
    my $self = shift;
 
@@ -429,12 +438,22 @@ Dist::Zilla::Plugin::Dpkg::FHS - Create Debian packaging for the FHS specificati
 
 =head1 Synopsis
 
-   use Dist::Zilla::Plugin::Dpkg::FHSDaemonControl;
-   # Brief but working code examples
+   # In your dist.ini
+   [Dpkg::FHS]
+   install_cmd   = your-app-cli install
+   uninstall_cmd = your-app-cli uninstall
+
+   [ChangelogFromGit::Debian]
+   file_name     = debian/changelog
+
+   # Then install with
+   dzil authordeps --missing | cpanm
 
 =head1 Description
 
 Create Debian packaging for the FHS specification
+
+Like L<Dist::Zilla::Plugin::Dpkg::Perlbrew::Starman> but better generalised
 
 =head1 Configuration and Environment
 
@@ -442,9 +461,83 @@ Defines the following attributes;
 
 =over 3
 
+=item C<apache_modules>
+
+A space separated list of Apache modules to enable
+
+=item C<bindir>
+
+The directory where the install and uninstall commands are found. Defaults
+to F<${PREFIX}/${PACKAGE}/${VERDIR}/bin>
+
+=item C<dh_format_spec>
+
+URI of specification for the Debian copyright file
+
+=item C<executable_files>
+
+A space separated list of file to make executable. Defaults to;
+F<debian/postinst>, F<debian/postrm>, and F<debian/rules>
+
+=item C<install_cmd>
+
+A required string. The command used to complete the installation after the
+file have been unpacked
+
+=item C<install_prefix>
+
+The path under which the application will be installed. Defaults to F</opt>
+as perl my loose interpretation of the FHS specification
+
+=item C<license_keys>
+
+The hash reference is used to translate Perl license names (meta specification
+2) into L<Software::License> subclass names
+
+=item C<module_abstract>
+
+The one line description of the application scraped from the main module POD
+
+=item C<module_metadata>
+
+An instance of L<Module::Metadata>
+
+=item C<permalink>
+
+The base of the URI to the application home page. Defaults to
+F<https:://metacpan.org/release>
+
+=item C<phase>
+
+An integer which default to 1. Appended to the short version number to create
+an installation directory name that allows for multiple instances of the same
+or different versions
+
+=item C<web_server>
+
+An enumerated list. One of; C<all>, C<apache>, C<native>, C<nginx>, or C<none>.
+Determines which webserver(s) if any will be started when the machine boots
+
+=item C<uninstall_cmd>
+
+The command used to uninstall the application
+
 =back
 
 =head1 Subroutines/Methods
+
+=head2 C<add_debian_copyright>
+
+Inject a Debian copyright file into the current build
+
+=head2 C<add_docs>
+
+Add the F<README> file to the Debian documentation
+
+=head2 C<fix_changelog>
+
+Replace the default author and author email strings with something more
+useful
 
 =head1 Diagnostics
 
@@ -454,7 +547,19 @@ None
 
 =over 3
 
-=item L<Class::Usul>
+=item L<Dist::Zilla::Plugin::Dpkg>
+
+=item L<Module::Load>
+
+=item L<Module::Metadata>
+
+=item L<Moose>
+
+=item L<Pod::Simple>
+
+=item L<Software::License>
+
+=item L<Text::Format>
 
 =back
 
@@ -465,7 +570,7 @@ There are no known incompatibilities in this module
 =head1 Bugs and Limitations
 
 There are no known bugs in this module. Please report problems to
-http://rt.cpan.org/NoAuth/Bugs.html?Dist=Dist-Zilla-Plugin-Dpkg-FHSDaemonControl.
+http://rt.cpan.org/NoAuth/Bugs.html?Dist=Dist-Zilla-Plugin-Dpkg-FHS.
 Patches are welcome
 
 =head1 Acknowledgements
