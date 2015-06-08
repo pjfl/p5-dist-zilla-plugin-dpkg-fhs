@@ -2,7 +2,7 @@ package Dist::Zilla::Plugin::Dpkg::FHSDaemonControl;
 
 use 5.010001;
 use namespace::autoclean;
-use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 4 $ =~ /\d+/gmx );
+use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 5 $ =~ /\d+/gmx );
 
 use File::Spec::Functions qw( catdir catfile );
 use List::Util            qw( first );
@@ -14,13 +14,18 @@ extends 'Dist::Zilla::Plugin::Dpkg';
 
 enum    'WebServer',     [ qw( all apache native nginx none ) ];
 
-subtype 'ApacheModule',  as   'Str', where { $_ =~ m{ \A [a-z_]+ \z }mx };
+subtype 'ApacheModule',  as 'Str', where { $_ =~ m{ \A [a-z_]+ \z }mx };
 
-subtype 'ApacheModules', as   'ArrayRef[ApacheModule]',
+subtype 'ApacheModules', as 'ArrayRef[ApacheModule]',
    message { 'The value provided for apache_modules does not look like a list '
            . 'of whitespace-separated Apache modules' };
 
-coerce  'ApacheModules', from 'Str', via   { [ split m{ \s+ }mx ] };
+coerce  'ApacheModules', from 'Str', via { [ split m{ \s+ }mx ] };
+
+subtype 'ListOfStr',     as 'ArrayRef[Str]',
+   message { 'Not a list of whitespace-separated strings' };
+
+coerce  'ListOfStr',     from 'Str', via { [ split m{ \s+ }mx ] };
 
 has '+default_template_default' =>
    default => '# Defaults for {$package_name} initscript
@@ -141,8 +146,8 @@ has 'bindir'           => is => 'ro', isa => 'Str', default =>
 
 has 'dh_format_spec'   => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
 
-has 'executable_files' => is => 'ro', isa => 'ArrayRef', default =>
-   sub { [ qw( debian/postinst debian/postrm debian/rules ) ] };
+has 'executable_files' => is => 'ro', isa => 'ListOfStr', coerce => 1,
+   default             => 'debian/postinst debian/postrm debian/rules';
 
 has 'install_cmd'      => is => 'ro', isa => 'Str', required => 1;
 
