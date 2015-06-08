@@ -1,5 +1,6 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHSDaemonControl
 
+          - Added docs file and fixed changelog
           - Added caching
           - Builds deb file
 

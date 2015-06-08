@@ -2,7 +2,7 @@ package Dist::Zilla::Plugin::Dpkg::FHSDaemonControl;
 
 use 5.010001;
 use namespace::autoclean;
-use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 3 $ =~ /\d+/gmx );
+use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 4 $ =~ /\d+/gmx );
 
 use File::Spec::Functions qw( catdir catfile );
 use List::Util            qw( first );
@@ -12,7 +12,7 @@ use Moose::Util::TypeConstraints;
 
 extends 'Dist::Zilla::Plugin::Dpkg';
 
-enum    'WebServer',     [ qw( all apache nginx none ) ];
+enum    'WebServer',     [ qw( all apache native nginx none ) ];
 
 subtype 'ApacheModule',  as   'Str', where { $_ =~ m{ \A [a-z_]+ \z }mx };
 
@@ -50,9 +50,7 @@ case "$1" in
         [ -e "$\{default\}" ] || ln -s $\{verdir\} $\{default\}
 
         {$install_cmd}
-
         {$webserver_config_link}
-
         {$webserver_restart}
     ;;
 
@@ -138,7 +136,8 @@ override_dh_pysupport:
 
 has 'apache_modules'   => is => 'ro', isa => 'ApacheModules', coerce => 1;
 
-has 'bindir'           => is => 'ro', isa => 'Str';
+has 'bindir'           => is => 'ro', isa => 'Str', default =>
+   sub { catdir( '${PREFIX}', '${PACKAGE}', '${VERDIR}', 'bin' ) };
 
 has 'dh_format_spec'   => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
 
@@ -163,7 +162,7 @@ has 'permalink'        => is => 'ro', isa => 'Str',
 
 has 'phase'            => is => 'ro', isa => 'Int', default => 1;
 
-has 'web_server'       => is => 'ro', isa => 'WebServer', default => 'none';
+has 'web_server'       => is => 'ro', isa => 'WebServer', default => 'native';
 
 has 'uninstall_cmd'    => is => 'ro', isa => 'Str', required => 1;
 
@@ -195,14 +194,6 @@ sub _build_module_metadata {
       ( $_[ 0 ]->zilla->main_module->name, collect_pod => 1 );
 }
 
-my $get_bindir = sub {
-   my ($self, $vars) = @_; $self->bindir and return $self->bindir;
-
-   return catdir( $vars->{install_prefix},
-                  $vars->{package_name  },
-                  $vars->{verdir        }, 'bin' );
-};
-
 my $get_homepage = sub {
    return sprintf '%s/%s/', $_[ 0 ]->permalink, $_[ 0 ]->package_name;
 };
@@ -228,19 +219,33 @@ my $set_vars_for_apache = sub {
 
    $vars->{package_binary_depends} .= ', apache2';
    $vars->{webserver_config_link } .= '# Symlink to the apache config for this environment
-      rm -f /etc/apache2/sites-available/$PACKAGE
-      ln -s /srv/$PACKAGE/config/apache/$PACKAGE.conf /etc/apache2/sites-available/$PACKAGE
+        rm -f /etc/apache2/sites-available/${PACKAGE}
+        ln -s /srv/$PACKAGE/config/apache/${PACKAGE}.conf /etc/apache2/sites-available/$PACKAGE
 ';
    $vars->{webserver_restart} .= 'a2enmod proxy proxy_http rewrite ';
    $vars->{webserver_restart} .= join ' ', @{ $self->apache_modules || [] };
    $vars->{webserver_restart} .= '
-      a2ensite $PACKAGE
-      mkdir -p /var/log/apache2/$PACKAGE
-      if which invoke-rc.d >/dev/null 2>&1; then
-         invoke-rc.d apache2 restart
-      else
-         /etc/init.d/apache2 restart
-      fi
+        a2ensite ${PACKAGE}
+        mkdir -p /var/log/apache2/${PACKAGE}
+        if which invoke-rc.d >/dev/null 2>&1; then
+            invoke-rc.d apache2 restart
+        else
+            /etc/init.d/apache2 restart
+        fi
+';
+
+   return;
+};
+
+my $set_vars_for_native = sub {
+   my ($self, $vars) = @_;
+
+   $vars->{webserver_restart} .= '
+        if which invoke-rc.d >/dev/null 2>&1; then
+            invoke-rc.d ${PACKAGE} restart
+        else
+            /etc/init.d/${PACKAGE} restart
+        fi
 ';
 
    return;
@@ -251,14 +256,14 @@ my $set_vars_for_nginx = sub {
 
    $vars->{package_binary_depends} .= ', nginx';
    $vars->{webserver_config_link } .= '# Symlink to the nginx config for this environment
-      rm -f /etc/nginx/sites-available/$PACKAGE
-      ln -s /srv/$PACKAGE/config/nginx/$PACKAGE.conf /etc/nginx/sites-available/$PACKAGE
+        rm -f /etc/nginx/sites-available/${PACKAGE}
+        ln -s /srv/$PACKAGE/config/nginx/${PACKAGE}.conf /etc/nginx/sites-available/${PACKAGE}
 ';
    $vars->{webserver_restart} .= 'if which invoke-rc.d >/dev/null 2>&1; then
-         invoke-rc.d nginx restart
-      else
-         /etc/init.d/nginx restart
-      fi
+        invoke-rc.d nginx restart
+        else
+            /etc/init.d/nginx restart
+        fi
 ';
 
    return;
@@ -303,17 +308,14 @@ my $enhance = sub {
    $vars->{install_prefix     } = $self->install_prefix;
    $vars->{package_description} = $self->module_abstract."\t${desc}";
    $vars->{verdir             } = "v${short_ver}p".$self->phase;
+   $vars->{install_cmd        } = catfile( $self->bindir, $self->install_cmd );
+   $vars->{uninstall_cmd      } = catfile( $self->bindir, $self->uninstall_cmd);
 
-   my $bind = $self->$get_bindir( $vars );
-
-   $vars->{install_cmd  } = catfile( $bind, $self->install_cmd );
-   $vars->{uninstall_cmd} = catfile( $bind, $self->uninstall_cmd  );
-
-   ($self->web_server eq 'apache' or $self->web_server eq 'all')
+  ($self->web_server eq 'apache'  or $self->web_server eq 'all')
       and $self->$set_vars_for_apache( $vars );
-
-   ($self->web_server eq 'nginx'  or $self->web_server eq 'all')
-      and $self->$set_vars_for_nginx( $vars );
+   $self->web_server eq 'native' and $self->$set_vars_for_native( $vars );
+  ($self->web_server eq 'nginx'   or $self->web_server eq 'all')
+      and $self->$set_vars_for_nginx ( $vars );
 
    return $vars_cache = $vars;
 };
@@ -339,7 +341,7 @@ around '_generate_file' => sub {
    return $res;
 };
 
-my $add_debian_copyright = sub {
+sub add_debian_copyright {
    my $self = shift; my (@res, %licenses);
 
    my $year       = 1900 + (localtime)[ 5 ];
@@ -374,10 +376,38 @@ my $add_debian_copyright = sub {
       content => (join "\n", @res), name => "debian/copyright", } ) );
 
    return;
-};
+}
+
+sub add_docs {
+   my $self  = shift; my $package = $self->package_name;
+
+   $self->add_file( Dist::Zilla::File::InMemory->new( {
+      content => "README\n", name => "debian/${package}.docs", } ) );
+
+   return;
+}
+
+sub fix_changelog {
+   my $self  = shift;
+   my $zilla = $self->zilla;
+   my $from  = 'CPAN Author <cpan@example.com>';
+   my $to    = $pod2text->( $zilla->authors->[ 0 ] );
+
+   for my $file (grep { $_->name eq 'debian/changelog' } @{ $zilla->files }) {
+      my $content = $file->_content; $content =~ s{ \Q$from\E }{$to}gmx;
+
+      $file->_content( $content ); last;
+   }
+
+   return;
+}
 
 after 'setup_installer' => sub {
-   my $self = shift; $self->$add_debian_copyright; return;
+   my $self = shift;
+
+   $self->add_debian_copyright; $self->add_docs; $self->fix_changelog;
+
+   return;
 };
 
 1;
