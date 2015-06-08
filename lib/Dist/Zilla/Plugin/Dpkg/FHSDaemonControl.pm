@@ -2,9 +2,10 @@ package Dist::Zilla::Plugin::Dpkg::FHSDaemonControl;
 
 use 5.010001;
 use namespace::autoclean;
-use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 2 $ =~ /\d+/gmx );
+use version; our $VERSION = qv( sprintf '0.1.%d', q$Rev: 3 $ =~ /\d+/gmx );
 
 use File::Spec::Functions qw( catdir catfile );
+use List::Util            qw( first );
 use Module::Load;
 use Moose;
 use Moose::Util::TypeConstraints;
@@ -135,31 +136,36 @@ override_dh_pysupport:
 
 ';
 
-has 'apache_modules'  => is => 'ro', isa => 'ApacheModules', coerce => 1;
+has 'apache_modules'   => is => 'ro', isa => 'ApacheModules', coerce => 1;
 
-has 'dh_format_spec'  => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
+has 'bindir'           => is => 'ro', isa => 'Str';
 
-has 'install_cmd'     => is => 'ro', isa => 'Str', required => 1;
+has 'dh_format_spec'   => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
 
-has 'install_prefix'  => is => 'ro', isa => 'Str', default => '/opt';
+has 'executable_files' => is => 'ro', isa => 'ArrayRef', default =>
+   sub { [ qw( debian/postinst debian/postrm debian/rules ) ] };
 
-has 'license_keys'    => is => 'ro', isa => 'HashRef', lazy => 1,
-   builder            => '_build_license_keys';
+has 'install_cmd'      => is => 'ro', isa => 'Str', required => 1;
 
-has 'module_abstract' => is => 'ro', isa => 'Str', lazy => 1,
-   builder            => '_build_module_abstract';
+has 'install_prefix'   => is => 'ro', isa => 'Str', default => '/opt';
 
-has 'module_metadata' => is => 'ro', isa => 'Object', lazy => 1,
-   builder            => '_build_module_metadata';
+has 'license_keys'     => is => 'ro', isa => 'HashRef', lazy => 1,
+   builder             => '_build_license_keys';
 
-has 'permalink'       => is => 'ro', isa => 'Str',
-   default            => 'https:://metacpan.org/release';
+has 'module_abstract'  => is => 'ro', isa => 'Str', lazy => 1,
+   builder             => '_build_module_abstract';
 
-has 'phase'           => is => 'ro', isa => 'Int', default => 1;
+has 'module_metadata'  => is => 'ro', isa => 'Object', lazy => 1,
+   builder             => '_build_module_metadata';
 
-has 'web_server'      => is => 'ro', isa => 'WebServer', default => 'none';
+has 'permalink'        => is => 'ro', isa => 'Str',
+   default             => 'https:://metacpan.org/release';
 
-has 'uninstall_cmd'   => is => 'ro', isa => 'Str', required => 1;
+has 'phase'            => is => 'ro', isa => 'Int', default => 1;
+
+has 'web_server'       => is => 'ro', isa => 'WebServer', default => 'none';
+
+has 'uninstall_cmd'    => is => 'ro', isa => 'Str', required => 1;
 
 sub _build_license_keys {
    return {
@@ -189,6 +195,14 @@ sub _build_module_metadata {
       ( $_[ 0 ]->zilla->main_module->name, collect_pod => 1 );
 }
 
+my $get_bindir = sub {
+   my ($self, $vars) = @_; $self->bindir and return $self->bindir;
+
+   return catdir( $vars->{install_prefix},
+                  $vars->{package_name  },
+                  $vars->{verdir        }, 'bin' );
+};
+
 my $get_homepage = sub {
    return sprintf '%s/%s/', $_[ 0 ]->permalink, $_[ 0 ]->package_name;
 };
@@ -207,71 +221,6 @@ my $license_content = sub {
    }
 
    return \@res;
-};
-
-my $squeeze = sub {
-   (my $v = $_[ 0 ] || q()) =~ s{ \s+ }{ }gmx; return $v;
-};
-
-my $trim = sub {
-   my $chs = $_[ 1 ] || " \t"; (my $v = $_[ 0 ] || q()) =~ s{ \A [$chs]+ }{}mx;
-
-   chomp $v; $v =~ s{ [$chs]+ \z }{}mx; return $v;
-};
-
-my $strip_pod = sub {
-   my $v = shift; $v =~ s{ C<< }{}mx; $v =~ s{ >> \z }{}mx;
-
-   return $trim->( $squeeze->( $v ) );
-};
-
-my $create_debian_copyright = sub {
-   my $self = shift; my (@res, %licenses);
-
-   my $year       = 1900 + (localtime)[ 5 ];
-   my $maintainer = $strip_pod->( $self->zilla->authors->[ 0 ] );
-   my $license    = $self->license_keys->{ $self->zilla->license->meta2_name }
-      or die 'Unknown copyright license';
-   my %fields     = ( Name       => $self->package_name,
-                      Maintainer => $maintainer,
-                      Source     => $self->$get_homepage );
-
-   push @res, $self->dh_format_spec;
-
-   for (grep { defined $fields{ $_ } } keys %fields) {
-      push @res, "$_: ".$fields{ $_ };
-   }
-
-   push @res, q(), 'Files: *', "Copyright: ${maintainer}";
-
-   if ($license ne 'Perl_5') { $licenses{ $license } = 1 }
-   else { $licenses{ 'Artistic_1_0' } = $licenses{ 'GPL_1' } = 1 }
-
-   push @res, 'License: '.(join ' or ', keys %licenses);
-   # debian/* files information - We default to the module being
-   # licensed as the super-set of the module and Perl itself.
-   $licenses{ 'Artistic_1_0' } = $licenses{ 'GPL_1' } = 1;
-
-   push @res, q(), 'Files: debian/*', "Copyright: ${year}, ${maintainer}";
-   push @res, 'License: '.(join ' or ', keys %licenses);
-   push @res, @{ $self->$license_content( \%licenses, $maintainer ) };
-
-   $self->add_file( Dist::Zilla::File::InMemory->new( {
-      content => (join "\n", @res), name => "debian/copyright", } ) );
-
-   return;
-};
-
-my $maybe_set_execute_permission = sub {
-   my $files = shift;
-
-   for my $name ( qw( debian/postinst debian/postrm debian/rules ) ) {
-      defined $files->[  0 ]
-          and $files->[ -1 ]->name eq $name
-          and $files->[ -1 ]->mode( oct '0755' );
-   }
-
-   return;
 };
 
 my $set_vars_for_apache = sub {
@@ -315,25 +264,47 @@ my $set_vars_for_nginx = sub {
    return;
 };
 
-around '_generate_file' => sub {
-   my ($orig, $self, $file, $required, $vars) = @_; my $zilla = $self->zilla;
+my $squeeze = sub {
+   (my $v = $_[ 0 ] || q()) =~ s{ \s+ }{ }gmx; return $v;
+};
 
-   my ($short_ver) = ($zilla->version =~ m{ \A (\d+ \. \d+) \. \d+ \z }mx);
+my $trim = sub {
+   my $chs = $_[ 1 ] || " \t"; (my $v = $_[ 0 ] || q()) =~ s{ \A [$chs]+ }{}mx;
 
-   my $desc = $self->module_metadata->pod( 'Description' );
+   chomp $v; $v =~ s{ [$chs]+ \z }{}mx; return $v;
+};
 
-   $desc and $desc =~ s{ (?: B|C|L ) \< ([^\>]+) \> }{$1}gmx
-         and $desc =~ s{ [\n] }{ }gmx
-         and $desc =  $trim->( $squeeze->( $desc ) );
+my $text_cache = {};
 
-   $vars->{author             } = $strip_pod->( $vars->{author} );
+my $pod2text = sub {
+   my $v = shift; $v or return q();
+
+   exists $text_cache->{ $v } and return $text_cache->{ $v };
+
+   load 'Pod::Simple::Text'; my $pst = Pod::Simple::Text->new;
+
+   my $v_buf; $pst->output_string( \$v_buf );
+
+   $pst->parse_string_document( "=pod\n\n${v}" ); $v_buf =~ s{ [\n] }{ }gmx;
+
+   return $text_cache->{ $v } = $trim->( $squeeze->( $v_buf ) );
+};
+
+my $vars_cache;
+
+my $enhance = sub {
+   my ($self, $vars) = @_; defined $vars_cache and return $vars_cache;
+
+   my $desc = $pod2text->( $self->module_metadata->pod( 'Description' ) );
+
+   my ($short_ver) = ($self->zilla->version =~ m{ \A (\d+\.\d+) \. \d+ \z }mx);
+
+   $vars->{author             } = $pod2text->( $vars->{author} );
    $vars->{install_prefix     } = $self->install_prefix;
    $vars->{package_description} = $self->module_abstract."\t${desc}";
    $vars->{verdir             } = "v${short_ver}p".$self->phase;
 
-   my $bind = catdir( $vars->{install_prefix},
-                      $vars->{package_name  },
-                      $vars->{verdir        }, 'bin' );
+   my $bind = $self->$get_bindir( $vars );
 
    $vars->{install_cmd  } = catfile( $bind, $self->install_cmd );
    $vars->{uninstall_cmd} = catfile( $bind, $self->uninstall_cmd  );
@@ -344,15 +315,69 @@ around '_generate_file' => sub {
    ($self->web_server eq 'nginx'  or $self->web_server eq 'all')
       and $self->$set_vars_for_nginx( $vars );
 
-   my $res = $orig->( $self, $file, $required, $vars );
+   return $vars_cache = $vars;
+};
 
-   $maybe_set_execute_permission->( $zilla->files );
+my $maybe_set_execute_permission = sub {
+   my ($self, $files) = @_;
+
+   defined $files->[ 0 ] or return; my $name = $files->[ -1 ]->name;
+
+   first { $name eq $_ } @{ $self->executable_files }
+      and $files->[ -1 ]->mode( oct '0755' );
+
+   return;
+};
+
+around '_generate_file' => sub {
+   my ($orig, $self, $file, $required, $vars) = @_;
+
+   my $res = $orig->( $self, $file, $required, $self->$enhance( $vars ) );
+
+   $self->$maybe_set_execute_permission( $self->zilla->files );
 
    return $res;
 };
 
+my $add_debian_copyright = sub {
+   my $self = shift; my (@res, %licenses);
+
+   my $year       = 1900 + (localtime)[ 5 ];
+   my $maintainer = $pod2text->( $self->zilla->authors->[ 0 ] );
+   my $license    = $self->license_keys->{ $self->zilla->license->meta2_name }
+      or  die 'Unknown copyright license '.$self->zilla->license->meta2_name;
+   my %fields     = ( Name       => $self->package_name,
+                      Maintainer => $maintainer,
+                      Source     => $self->$get_homepage );
+
+   push @res, $self->dh_format_spec;
+
+   for (grep { defined $fields{ $_ } } keys %fields) {
+      push @res, "$_: ".$fields{ $_ };
+   }
+
+   push @res, q(), 'Files: *', "Copyright: ${maintainer}";
+
+   if ($license ne 'Perl_5') { $licenses{ $license } = 1 }
+   else { $licenses{ 'Artistic_1_0' } = $licenses{ 'GPL_1' } = 1 }
+
+   push @res, 'License: '.(join ' or ', keys %licenses);
+   # debian/* files information - We default to the module being
+   # licensed as the super-set of the module and Perl itself.
+   $licenses{ 'Artistic_1_0' } = $licenses{ 'GPL_1' } = 1;
+
+   push @res, q(), 'Files: debian/*', "Copyright: ${year}, ${maintainer}";
+   push @res, 'License: '.(join ' or ', keys %licenses);
+   push @res, @{ $self->$license_content( \%licenses, $maintainer ) };
+
+   $self->add_file( Dist::Zilla::File::InMemory->new( {
+      content => (join "\n", @res), name => "debian/copyright", } ) );
+
+   return;
+};
+
 after 'setup_installer' => sub {
-   my $self = shift; $self->$create_debian_copyright; return;
+   my $self = shift; $self->$add_debian_copyright; return;
 };
 
 1;

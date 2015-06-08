@@ -1,5 +1,6 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHSDaemonControl
 
+          - Added caching
           - Builds deb file
 
 0.1.1     2015-06-07 01:25:30
