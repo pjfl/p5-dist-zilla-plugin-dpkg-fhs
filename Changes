@@ -1,5 +1,6 @@
-Revision history for Dist::Zilla::Plugin::Dpkg::FHSDaemonControl
+Revision history for Dist::Zilla::Plugin::Dpkg::FHS
 
+          - Renamed removed the DaemonControl
           - Added docs file and fixed changelog
           - Added caching
           - Builds deb file

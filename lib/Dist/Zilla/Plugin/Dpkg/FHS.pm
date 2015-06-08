@@ -1,4 +1,4 @@
-package Dist::Zilla::Plugin::Dpkg::FHSDaemonControl;
+package Dist::Zilla::Plugin::Dpkg::FHS;
 
 use 5.010001;
 use namespace::autoclean;
@@ -425,7 +425,7 @@ __END__
 
 =head1 Name
 
-Dist::Zilla::Plugin::Dpkg::FHSDaemonControl - One-line description of the modules purpose
+Dist::Zilla::Plugin::Dpkg::FHS - Create Debian packaging for the FHS specification
 
 =head1 Synopsis
 
@@ -433,6 +433,8 @@ Dist::Zilla::Plugin::Dpkg::FHSDaemonControl - One-line description of the module
    # Brief but working code examples
 
 =head1 Description
+
+Create Debian packaging for the FHS specification
 
 =head1 Configuration and Environment
 
@@ -445,6 +447,8 @@ Defines the following attributes;
 =head1 Subroutines/Methods
 
 =head1 Diagnostics
+
+None
 
 =head1 Dependencies
 

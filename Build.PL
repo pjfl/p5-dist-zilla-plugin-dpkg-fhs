@@ -4,7 +4,7 @@ use warnings;
 use Module::Build 0.4004;
 
 my $perl_ver = 5.010001;
-my $name     = 'Dist-Zilla-Plugin-Dpkg-FHSDaemonControl'; $name =~ s{ - }{::}gmx;
+my $name     = 'Dist-Zilla-Plugin-Dpkg-FHS'; $name =~ s{ - }{::}gmx;
 my $prereqs  = {
   'build_requires' => {
     'Module::Build' => '0.4004',
@@ -20,6 +20,7 @@ my $prereqs  = {
     'Module::Load' => '0.32',
     'Module::Metadata' => '1.000024',
     'Moose' => '2.1213',
+    'Pod::Simple' => '3.28',
     'Software::License' => '0.103010',
     'Text::Format' => '0.59',
     'perl' => '5.010001'

@@ -1,6 +1,6 @@
 # Name
 
-Dist::Zilla::Plugin::Dpkg::FHSDaemonControl - One-line description of the modules purpose
+Dist::Zilla::Plugin::Dpkg::FHS - Create Debian packaging for the FHS specification
 
 # Synopsis
 
@@ -9,6 +9,8 @@ Dist::Zilla::Plugin::Dpkg::FHSDaemonControl - One-line description of the module
 
 # Description
 
+Create Debian packaging for the FHS specification
+
 # Configuration and Environment
 
 Defines the following attributes;
@@ -16,6 +18,8 @@ Defines the following attributes;
 # Subroutines/Methods
 
 # Diagnostics
+
+None
 
 # Dependencies
 
