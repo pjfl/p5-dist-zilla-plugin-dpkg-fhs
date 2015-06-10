@@ -357,7 +357,7 @@ sub add_debian_copyright {
 
    push @res, $self->dh_format_spec;
 
-   for (grep { defined $fields{ $_ } } keys %fields) {
+   for ( grep { defined $fields{ $_ } } keys %fields) {
       push @res, "$_: ".$fields{ $_ };
    }
 
