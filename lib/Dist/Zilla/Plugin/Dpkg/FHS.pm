@@ -282,11 +282,11 @@ my $set_vars_for_nginx = sub {
 };
 
 my $squeeze = sub {
-   (my $v = $_[ 0 ] || q()) =~ s{ \s+ }{ }gmx; return $v;
+   (my $v = $_[ 0 ] // q()) =~ s{ \s+ }{ }gmx; return $v;
 };
 
 my $trim = sub {
-   my $chs = $_[ 1 ] || " \t"; (my $v = $_[ 0 ] || q()) =~ s{ \A [$chs]+ }{}mx;
+   my $chs = $_[ 1 ] // " \t"; (my $v = $_[ 0 ] // q()) =~ s{ \A [$chs]+ }{}mx;
 
    chomp $v; $v =~ s{ [$chs]+ \z }{}mx; return $v;
 };
@@ -423,6 +423,10 @@ after 'setup_installer' => sub {
 
    return;
 };
+
+__PACKAGE__->meta->make_immutable;
+
+no Moose;
 
 1;
 
