@@ -25,6 +25,11 @@ my $prereqs  = {
     'namespace::autoclean' => '0.22',
     'perl' => '5.010001'
   },
+  'test_requires' => {
+    'File::Spec' => '0',
+    'Module::Metadata' => '1.000024',
+    'Sys::Hostname' => '0'
+  },
 };
 my $testing  = sub { $ENV{AUTOMATED_TESTING}
                   || $ENV{PERL_CPAN_REPORTER_CONFIG}

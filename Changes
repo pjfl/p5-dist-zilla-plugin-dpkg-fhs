@@ -1,5 +1,6 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHS
 
+          - Replaced 01allways_pass.t with Test::ReportMetaData
           - Passes tests
           - Renamed removed the DaemonControl
           - Added docs file and fixed changelog
