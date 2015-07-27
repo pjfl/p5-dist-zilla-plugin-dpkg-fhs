@@ -9,6 +9,8 @@ use List::Util            qw( first );
 use Module::Load;
 use Moose;
 use Moose::Util::TypeConstraints;
+use Pod::Simple::Text;
+use Text::Format;
 
 extends 'Dist::Zilla::Plugin::Dpkg';
 
@@ -56,9 +58,9 @@ VERDIR={$verdir}
 case "$1" in
     configure)
         default=$\{PREFIX\}/$\{PACKAGE\}/default
-        verdir=$\{PREFIX\}/$\{PACKAGE\}/$\{VERDIR\}
+        appldir=$\{PREFIX\}/$\{PACKAGE\}/$\{VERDIR\}
 
-        [ -e "$\{default\}" ] || ln -s $\{verdir\} $\{default\}
+        [ -e "$\{default\}" ] || ln -s $\{appldir\} $\{default\}
 
         {$install_cmd}
         {$webserver_config_link}
@@ -107,13 +109,14 @@ case "$1" in
          rm -f /etc/apache2/sites-available/$\{PACKAGE\}
       fi
 
-      appd=$\{PREFIX\}/$\{PACKAGE\};
+      packd=$\{PREFIX\}/$\{PACKAGE\};
 
-      # Remove the home directory
-      cd $\{appd\} && test -d "$\{VERDIR\}" && rm -fr $\{VERDIR\}; rc=$\{?\}
+      # Remove the application directory
+      cd $\{packd\} && test -d "$\{VERDIR\}" && rm -fr $\{VERDIR\}; rc=$\{?\}
 
-      [ $\{rc\} -eq 0 ] && cd $\{PREFIX\} && test -d "$\{appd\}" \
-                      && rmdir $\{appd\} 2>/dev/null
+      # Remove the package directory if there are no versions left
+      [ $\{rc\} -eq 0 ] && cd $\{PREFIX\} && test -d "$\{packd\}" \
+                      && rmdir $\{packd\} 2>/dev/null
    ;;
 
    remove|upgrade|failed-upgrade|abort-install|abort-upgrade|disappear)
@@ -136,6 +139,11 @@ has '+rules_template_default' =>
 override_dh_auto_configure:
 	dh_auto_configure -- install_base={$install_prefix}/{$package_name}/{$verdir}
 
+override_dh_auto_build:
+
+override_dh_gencontrol:
+	dh_gencontrol -- -v{$debian_version}
+
 override_dh_pysupport:
 
 %:
@@ -144,66 +152,52 @@ override_dh_pysupport:
 ';
 
 # Public attributes
-has 'apache_modules'   => is => 'ro', isa => 'ApacheModules', coerce => 1;
+has 'apache_modules'     => is => 'ro', isa => 'ApacheModules', coerce => 1;
 
-has 'bindir'           => is => 'ro', isa => 'Str', default =>
+has 'bindir'             => is => 'ro', isa => 'Str', default =>
    sub { catdir( '${PREFIX}', '${PACKAGE}', '${VERDIR}', 'bin' ) };
 
-has 'dh_format_spec'   => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
+has 'debian_version'     => is => 'ro', isa => 'Str', lazy => 1,
+   builder               => '_build_debian_version';
 
-has 'executable_files' => is => 'ro', isa => 'ListOfStr', coerce => 1,
-   default             => 'debian/postinst debian/postrm debian/rules';
+has 'dh_format_spec'     => is => 'ro', isa => 'Str', default => 'Format-Specification: http://svn.debian.org/wsvn/dep/web/deps/dep5.mdwn?op=file&rev=135';
 
-has 'install_cmd'      => is => 'ro', isa => 'Str', required => 1;
+has 'executable_files'   => is => 'ro', isa => 'ListOfStr', coerce => 1,
+   default               => 'debian/postinst debian/postrm debian/rules';
 
-has 'install_prefix'   => is => 'ro', isa => 'Str', default => '/opt';
+has 'install_cmd'        => is => 'ro', isa => 'Str', required => 1;
 
-has 'license_keys'     => is => 'ro', isa => 'HashRef', lazy => 1,
-   builder             => '_build_license_keys';
+has 'install_prefix'     => is => 'ro', isa => 'Str', default => '/opt';
 
-has 'module_abstract'  => is => 'ro', isa => 'Str', lazy => 1,
-   builder             => '_build_module_abstract';
+has 'license_keys'       => is => 'ro', isa => 'HashRef', lazy => 1,
+   builder               => '_build_license_keys';
 
-has 'module_metadata'  => is => 'ro', isa => 'Object', lazy => 1,
-   builder             => '_build_module_metadata';
+has 'module_abstract'    => is => 'ro', isa => 'Str', lazy => 1,
+   builder               => '_build_module_abstract';
 
-has 'permalink'        => is => 'ro', isa => 'Str',
-   default             => 'https:://metacpan.org/release';
+has 'module_description' => is => 'ro', isa => 'Str', lazy => 1,
+   builder               => '_build_module_description';
 
-has 'phase'            => is => 'ro', isa => 'Int', default => 1;
+has 'module_metadata'    => is => 'ro', isa => 'Object', lazy => 1,
+   builder               => '_build_module_metadata';
 
-has 'web_server'       => is => 'ro', isa => 'WebServer', default => 'native';
+has 'permalink'          => is => 'ro', isa => 'Str',
+   default               => 'https:://metacpan.org/release';
 
-has 'uninstall_cmd'    => is => 'ro', isa => 'Str', required => 1;
+has 'phase'              => is => 'ro', isa => 'Int', default => 1;
 
-# Attribute constructors
-sub _build_license_keys {
-   return {
-      perl       => 'Perl_5',
-      perl_5     => 'Perl_5',
-      apache     => [ map { "Apache_$_" } qw( 1_1 2_0 ) ],
-      artistic   => 'Artistic_1_0',
-      artistic_2 => 'Artistic_2_0',
-      lgpl       => [ map { "LGPL_$_" } qw( 2_1 3_0 ) ],
-      bsd        => 'BSD',
-      gpl        => [ map { "GPL_$_" } qw( 1 2 3 ) ],
-      mit        => 'MIT',
-      mozilla    => [ map { "Mozilla_$_" } qw( 1_0 1_1 ) ], };
-}
+has 'short_version'      => is => 'ro', isa => 'Str', lazy => 1,
+   builder               => '_build_short_version';
 
-sub _build_module_abstract {
-   my $self = shift; my $meta = $self->module_metadata; my $abstract = q();
+has 'verdir'             => is => 'ro', isa => 'Str', lazy => 1,
+   builder               => '_build_verdir';
 
-   $meta and ($abstract = $meta->pod( 'Name' ) // q())
-      =~ s{ \A [^\-]+ \s* [\-] \s* }{}mx; chomp $abstract;
+has 'web_server'         => is => 'ro', isa => 'WebServer', default => 'native';
 
-   return $abstract;
-}
+has 'uninstall_cmd'      => is => 'ro', isa => 'Str', required => 1;
 
-sub _build_module_metadata {
-   load 'Module::Metadata'; return Module::Metadata->new_from_file
-      ( $_[ 0 ]->zilla->main_module->name, collect_pod => 1 );
-}
+# Package variables
+my $text_cache = {}; my $vars_cache;
 
 # Private subroutines
 my $get_homepage = sub {
@@ -211,7 +205,7 @@ my $get_homepage = sub {
 };
 
 my $license_content = sub {
-   my ($self, $licenses, $maintainer) = @_; my @res = (); load 'Text::Format';
+   my ($licenses, $maintainer) = @_; my @res = ();
 
    my $formatter = Text::Format->new; $formatter->leftMargin( 2 );
 
@@ -291,66 +285,83 @@ my $trim = sub {
    chomp $v; $v =~ s{ [$chs]+ \z }{}mx; return $v;
 };
 
-my $text_cache = {};
-
 my $pod2text = sub {
    my $v = shift; $v or return q();
 
    exists $text_cache->{ $v } and return $text_cache->{ $v };
 
-   load 'Pod::Simple::Text'; my $pst = Pod::Simple::Text->new;
+   my $parser = Pod::Simple::Text->new;
+   my $text; $parser->output_string( \$text );
 
-   my $v_buf; $pst->output_string( \$v_buf );
+   $parser->parse_string_document( "=pod\n\n${v}" ); $text =~ s{ [\n] }{ }gmx;
 
-   $pst->parse_string_document( "=pod\n\n${v}" ); $v_buf =~ s{ [\n] }{ }gmx;
-
-   return $text_cache->{ $v } = $trim->( $squeeze->( $v_buf ) );
+   return $text_cache->{ $v } = $trim->( $squeeze->( $text ) );
 };
 
-my $vars_cache;
+# Attribute constructors
+sub _build_debian_version {
+   my $self = shift;
 
-my $enhance = sub {
-   my ($self, $vars) = @_; defined $vars_cache and return $vars_cache;
+   return $self->short_version.($self->phase ? '-'.$self->phase : q());
+}
 
-   my $desc = $pod2text->( $self->module_metadata->pod( 'Description' ) );
+sub _build_license_keys {
+   return {
+      perl       => 'Perl_5',
+      perl_5     => 'Perl_5',
+      apache     => [ map { "Apache_$_" } qw( 1_1 2_0 ) ],
+      artistic   => 'Artistic_1_0',
+      artistic_2 => 'Artistic_2_0',
+      lgpl       => [ map { "LGPL_$_" } qw( 2_1 3_0 ) ],
+      bsd        => 'BSD',
+      gpl        => [ map { "GPL_$_" } qw( 1 2 3 ) ],
+      mit        => 'MIT',
+      mozilla    => [ map { "Mozilla_$_" } qw( 1_0 1_1 ) ], };
+}
 
-   my ($short_ver) = ($self->zilla->version =~ m{ \A (\d+\.\d+) \. \d+ \z }mx);
+sub _build_module_abstract {
+   my $self = shift; my $meta = $self->module_metadata;
 
-   $vars->{author             } = $pod2text->( $vars->{author} );
-   $vars->{install_prefix     } = $self->install_prefix;
-   $vars->{package_description} = $self->module_abstract."\t${desc}";
-   $vars->{verdir             } = "v${short_ver}p".$self->phase;
-   $vars->{install_cmd        } = catfile( $self->bindir, $self->install_cmd );
-   $vars->{uninstall_cmd      } = catfile( $self->bindir, $self->uninstall_cmd);
+   my $abstract = q(); ($abstract = $meta->pod( 'Name' ) // q())
+      =~ s{ \A [^\-]+ \s* [\-] \s* }{}mx; chomp $abstract;
 
-  ($self->web_server eq 'apache'  or $self->web_server eq 'all')
-      and $self->$set_vars_for_apache( $vars );
-   $self->web_server eq 'native' and $self->$set_vars_for_native( $vars );
-  ($self->web_server eq 'nginx'   or $self->web_server eq 'all')
-      and $self->$set_vars_for_nginx ( $vars );
+   return $pod2text->( $abstract );
+}
 
-   return $vars_cache = $vars;
-};
+sub _build_module_description {
+   my $self = shift; my $meta = $self->module_metadata;
 
-my $maybe_set_execute_permission = sub {
-   my ($self, $files) = @_;
+   return $pod2text->( $meta->pod( 'Description' ) );
+}
 
-   defined $files->[ 0 ] or return; my $name = $files->[ -1 ]->name;
+sub _build_module_metadata {
+   load 'Module::Metadata'; return Module::Metadata->new_from_file
+      ( $_[ 0 ]->zilla->main_module->name, collect_pod => 1 );
+}
 
-   first { $name eq $_ } @{ $self->executable_files }
-      and $files->[ -1 ]->mode( oct '0755' );
+sub _build_short_version {
+   my $self  = shift;
+   my ($ver) = $self->zilla->version
+      =~ m{ \A (?: v )? ( \d+ \. \d+ ) (?: [\._] \d+ )? \z }mx;
 
-   return;
-};
+   return $ver
+}
+
+sub _build_verdir {
+   my $self = shift;
+
+   return 'v'.$self->short_version.($self->phase ? 'p'.$self->phase : q());
+}
 
 # Public methods
 sub add_debian_copyright {
    my $self = shift; my (@res, %licenses);
 
+   my $zilla      = $self->zilla;
    my $year       = 1900 + (localtime)[ 5 ];
-   my $maintainer = $pod2text->( $self->zilla->authors->[ 0 ] );
-   my $license    = $self->license_keys->{ $self->zilla->license->meta2_name }
-      or  die 'Unknown copyright license '.$self->zilla->license->meta2_name;
+   my $maintainer = $pod2text->( $zilla->authors->[ 0 ] );
+   my $license    = $self->license_keys->{ $zilla->license->meta2_name }
+      or  die 'Unknown copyright license '.$zilla->license->meta2_name;
    my %fields     = ( Name       => $self->package_name,
                       Maintainer => $maintainer,
                       Source     => $self->$get_homepage );
@@ -373,7 +384,7 @@ sub add_debian_copyright {
 
    push @res, q(), 'Files: debian/*', "Copyright: ${year}, ${maintainer}";
    push @res, 'License: '.(join ' or ', keys %licenses);
-   push @res, @{ $self->$license_content( \%licenses, $maintainer ) };
+   push @res, @{ $license_content->( \%licenses, $maintainer ) };
 
    $self->add_file( Dist::Zilla::File::InMemory->new( {
       content => (join "\n", @res), name => "debian/copyright", } ) );
@@ -388,6 +399,28 @@ sub add_docs {
       content => "README\n", name => "debian/${package}.docs", } ) );
 
    return;
+}
+
+sub enhance {
+   my ($self, $vars) = @_; defined $vars_cache and return $vars_cache;
+
+   my $desc = $self->module_description;
+
+   $vars->{author             } = $pod2text->( $vars->{author} );
+   $vars->{debian_version     } = $self->debian_version;
+   $vars->{install_prefix     } = $self->install_prefix;
+   $vars->{package_description} = $self->module_abstract."\n\t${desc}";
+   $vars->{verdir             } = $self->verdir;
+   $vars->{install_cmd        } = catfile( $self->bindir, $self->install_cmd );
+   $vars->{uninstall_cmd      } = catfile( $self->bindir, $self->uninstall_cmd);
+
+  ($self->web_server eq 'apache'  or $self->web_server eq 'all')
+      and $self->$set_vars_for_apache( $vars );
+   $self->web_server eq 'native' and $self->$set_vars_for_native( $vars );
+  ($self->web_server eq 'nginx'   or $self->web_server eq 'all')
+      and $self->$set_vars_for_nginx ( $vars );
+
+   return $vars_cache = $vars;
 }
 
 sub fix_changelog {
@@ -405,13 +438,24 @@ sub fix_changelog {
    return;
 }
 
+sub maybe_set_execute_permission {
+   my ($self, $files) = @_; defined $files->[ 0 ] or return;
+
+   my $name = $files->[ -1 ]->name;
+
+   first { $name eq $_ } @{ $self->executable_files }
+      and $files->[ -1 ]->mode( oct '0755' );
+
+   return;
+}
+
 # Construction
 around '_generate_file' => sub { # So it's a private method, meh
    my ($orig, $self, $file, $required, $vars) = @_;
 
-   my $res = $orig->( $self, $file, $required, $self->$enhance( $vars ) );
+   my $res = $orig->( $self, $file, $required, $self->enhance( $vars ) );
 
-   $self->$maybe_set_execute_permission( $self->zilla->files );
+   $self->maybe_set_execute_permission( $self->zilla->files );
 
    return $res;
 };
@@ -455,7 +499,8 @@ Dist::Zilla::Plugin::Dpkg::FHS - Create Debian packaging for the FHS specificati
 
 =head1 Description
 
-Create Debian packaging for the FHS specification
+Create Debian packaging for the FHS specification. The install prefix can be
+set from F<dist.ini>
 
 Like L<Dist::Zilla::Plugin::Dpkg::Perlbrew::Starman> but better generalised
 
@@ -472,7 +517,13 @@ A space separated list of Apache modules to enable
 =item C<bindir>
 
 The directory where the install and uninstall commands are found. Defaults
-to F<${PREFIX}/${PACKAGE}/${VERDIR}/bin>
+to F<${PREFIX}/${PACKAGE}/${VERDIR}/bin>. The shell variables are evaluated
+at run time
+
+=item C<debian_version>
+
+The Debian version included in the archive file name. Defaults to
+F<< <short_version>-<phase> >>
 
 =item C<dh_format_spec>
 
@@ -502,6 +553,10 @@ The hash reference is used to translate Perl license names (meta specification
 
 The one line description of the application scraped from the main module POD
 
+=item C<module_description>
+
+Description taken from the main module POD
+
 =item C<module_metadata>
 
 An instance of L<Module::Metadata>
@@ -517,6 +572,14 @@ An integer which default to 1. Appended to the short version number to create
 an installation directory name that allows for multiple instances of the same
 or different versions
 
+=item C<short_version>
+
+Just the major and minor version numbers not the subversion
+
+=item C<verdir>
+
+The version directory. Defaults to F<< v<short_version>p<phase> >>
+
 =item C<web_server>
 
 An enumerated list. One of; C<all>, C<apache>, C<native>, C<nginx>, or C<none>.
@@ -524,7 +587,7 @@ Determines which webserver(s) if any will be started when the machine boots
 
 =item C<uninstall_cmd>
 
-The command used to uninstall the application
+A required string. The command used to uninstall the application
 
 =back
 
@@ -538,10 +601,20 @@ Inject a Debian copyright file into the current build
 
 Add the F<README> file to the Debian documentation
 
+=head2 C<enhance>
+
+Adds more attributes to the stash which is passed to the templating subroutine
+when files are generated
+
 =head2 C<fix_changelog>
 
 Replace the default author and author email strings with something more
 useful
+
+=head2 C<maybe_set_execute_permission>
+
+Checks if the last file in the list of L<zilla|Dist::Zilla/files> files is in
+the L</executable_files> list, sets the file's execute permission
 
 =head1 Diagnostics
 

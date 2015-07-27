@@ -1,10 +1,10 @@
 requires "Dist::Zilla::Plugin::Dpkg" => "0.05";
-requires "Module::Metadata" => "1.000024";
-requires "Moose" => "2.1213";
-requires "Pod::Simple" => "3.28";
+requires "Module::Metadata" => "1.000027";
+requires "Moose" => "2.1405";
+requires "Pod::Simple" => "3.30";
 requires "Software::License" => "0.103010";
 requires "Text::Format" => "0.59";
-requires "namespace::autoclean" => "0.22";
+requires "namespace::autoclean" => "0.26";
 requires "perl" => "5.010001";
 
 on 'build' => sub {
@@ -15,7 +15,7 @@ on 'build' => sub {
 
 on 'test' => sub {
   requires "File::Spec" => "0";
-  requires "Module::Metadata" => "1.000024";
+  requires "Module::Metadata" => "1.000027";
   requires "Sys::Hostname" => "0";
 };
 

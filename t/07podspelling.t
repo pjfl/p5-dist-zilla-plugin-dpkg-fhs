@@ -43,3 +43,4 @@ flanigan
 Dist::Zilla::Plugin::Dpkg::FHSDaemonControl
 merchantability
 FHS
+zilla

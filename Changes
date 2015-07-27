@@ -1,5 +1,7 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHS
 
+          - Added short_version and debian_version
+          - Made verdir an attribute
           - Replaced 01allways_pass.t with Test::ReportMetaData
           - Passes tests
           - Renamed removed the DaemonControl

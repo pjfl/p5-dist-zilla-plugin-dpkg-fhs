@@ -17,7 +17,8 @@ Dist::Zilla::Plugin::Dpkg::FHS - Create Debian packaging for the FHS specificati
 
 # Description
 
-Create Debian packaging for the FHS specification
+Create Debian packaging for the FHS specification. The install prefix can be
+set from `dist.ini`
 
 Like [Dist::Zilla::Plugin::Dpkg::Perlbrew::Starman](https://metacpan.org/pod/Dist::Zilla::Plugin::Dpkg::Perlbrew::Starman) but better generalised
 
@@ -32,7 +33,13 @@ Defines the following attributes;
 - `bindir`
 
     The directory where the install and uninstall commands are found. Defaults
-    to `${PREFIX}/${PACKAGE}/${VERDIR}/bin`
+    to `${PREFIX}/${PACKAGE}/${VERDIR}/bin`. The shell variables are evaluated
+    at run time
+
+- `debian_version`
+
+    The Debian version included in the archive file name. Defaults to
+    `<short_version>-<phase>`
 
 - `dh_format_spec`
 
@@ -62,6 +69,10 @@ Defines the following attributes;
 
     The one line description of the application scraped from the main module POD
 
+- `module_description`
+
+    Description taken from the main module POD
+
 - `module_metadata`
 
     An instance of [Module::Metadata](https://metacpan.org/pod/Module::Metadata)
@@ -77,6 +88,14 @@ Defines the following attributes;
     an installation directory name that allows for multiple instances of the same
     or different versions
 
+- `short_version`
+
+    Just the major and minor version numbers not the subversion
+
+- `verdir`
+
+    The version directory. Defaults to `v<short_version>p<phase>`
+
 - `web_server`
 
     An enumerated list. One of; `all`, `apache`, `native`, `nginx`, or `none`.
@@ -84,7 +103,7 @@ Defines the following attributes;
 
 - `uninstall_cmd`
 
-    The command used to uninstall the application
+    A required string. The command used to uninstall the application
 
 # Subroutines/Methods
 
@@ -96,10 +115,20 @@ Inject a Debian copyright file into the current build
 
 Add the `README` file to the Debian documentation
 
+## `enhance`
+
+Adds more attributes to the stash which is passed to the templating subroutine
+when files are generated
+
 ## `fix_changelog`
 
 Replace the default author and author email strings with something more
 useful
+
+## `maybe_set_execute_permission`
+
+Checks if the last file in the list of [zilla](https://metacpan.org/pod/Dist::Zilla#files) files is in
+the ["executable\_files"](#executable_files) list, sets the file's execute permission
 
 # Diagnostics
 

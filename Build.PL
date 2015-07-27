@@ -17,17 +17,17 @@ my $prereqs  = {
   },
   'requires' => {
     'Dist::Zilla::Plugin::Dpkg' => '0.05',
-    'Module::Metadata' => '1.000024',
-    'Moose' => '2.1213',
-    'Pod::Simple' => '3.28',
+    'Module::Metadata' => '1.000027',
+    'Moose' => '2.1405',
+    'Pod::Simple' => '3.30',
     'Software::License' => '0.103010',
     'Text::Format' => '0.59',
-    'namespace::autoclean' => '0.22',
+    'namespace::autoclean' => '0.26',
     'perl' => '5.010001'
   },
   'test_requires' => {
     'File::Spec' => '0',
-    'Module::Metadata' => '1.000024',
+    'Module::Metadata' => '1.000027',
     'Sys::Hostname' => '0'
   },
 };
