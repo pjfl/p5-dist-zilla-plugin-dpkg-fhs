@@ -1,5 +1,6 @@
 Revision history for Dist::Zilla::Plugin::Dpkg::FHS
 
+          - Toolchain update
           - APPLDIR needed by Class::Usul::Functions::find_home
           - Added short_version and debian_version
           - Made verdir an attribute
